@@ -1,0 +1,81 @@
+Summary: Parallel conjugate gradient-like algorithms for solving sparse nonsymmetric linear systems
+on a vector multiprocessor
+
+
+A linear system of equations Au=b can be solved by either a direct method or an iterative method. Based on the 
+properties of matrix A, it is decided which of the two is most favorable. For example in practice matrix 
+A is usually very large that it becomes computational expensive to use a direct method for obtaining a 
+solution and thus in this case an iterative method is prefreable. Other properties including symmetry,
+positive definiteness and spectral radius become important when determining which type of iterative method
+will suit our model the best.
+For symmetric positive definite cases the preconditioned conjugate gradient method (hereafter PCG) is one of the most
+efficient method for solving the system.
+In this essay we focus on the implementation of two extension of the PCG iterative method to obtain a solution of Au=b for the nonsymmetric case.
+The conjugate gradient squared algorithm (CGS)[1] and the generalized minimal residual algorithm GMRES(k)[2] are studied.
+For both methods, preconditioning is considered by a diagonal matrix and by an incomplete LU factorization.
+
+Coefficient matrices arising from applications that have irregular sparsity structure and are stored based on the storage 
+scheme used in ITPACKV[2] which known as compressed matrix representation [3]. ITPACKV makes efficiently
+use of the vector hardware (processors) [4,5] that was available and allows us to represent matrices emerging
+form discritization of PDE's on irregular grids.                                             
+
+The CGS algorithm is derived from the bi-conjugate gradient algorithm (BCG)[4] and has several advantages
+over it namely that convergence is ensured whenever BCG does and is also faster. Also note that the CGS 
+converges to the correct solutions in at most m iterations as long as it does not break down. The 
+stop criterion of this iterative method can be specified by the user. See appendix A.1
+for the CGS procedure.
+
+In the GMRES(k) algorithm, the solution is written as a linear combination of basis vector in
+order to minimize the residual error in the subspace spanned by the basis vector. The process is restarted
+every k iterations. The advantage is that convergence is ensured if k is chosen large enough. The stopping 
+criteria is the same as the CGS. See appendix A.2 for GMRES(k) procedure.
+
+We now consider the parallel implementation of the preconditioned diagonal matrix. This is straight forward,
+because we split the work equally among all processors. Here we normalize the diagonal of the matrix AA^T, so we set 
+K_i = sqrt (sum_j(a_ij^2)).
+
+K can also be seen as the identity matrix. The basic scheme of the 2 methods boils down to :
+
+Kernel A
+y = Ax + alpha*x
+e = (y,q)
+
+If we have p processors, we divide all the work computational equally among all processors i.e. each processor operates
+on a horizontal slice of A and computes a section of length y and the corresponding fraction of the scalar
+product e.
+
+We now consider the parallel ILU preconditioned version, which is more challenging.
+The incomplete factorization of A is given by
+
+A = LDU - R
+
+in which is a small error matrix and is not computed, because K=LDU is the preconditioning matrix.
+Note that the ILU preconditioner is sequential. There are 2 different strategies employed in computing 
+the parallel ILU preconditioner L_n D_n U_n :
+
+Global preconditioner: the idea here is to compute the global ILU factorization of A = LDU - R.
+Then for each block A_n, we only treat those elements of L, D, U that belongs to A_n and cosequently
+store them in L_n, D_n, U_n.
+
+Local preconditioner: the idea here is to compute the ILU factorization of all the blocks in parallel i.e.
+A_n = L_n D_n U_n - R_n
+
+The parallel implementation of these algorithims has extensively been studied by Radicati di Brozolo et al.[x]
+
+In the following numerical simulations, the performance of the parallel implementation of the iterative solvers
+are studied. The emphasis in put on efficiency, which is influenced by the size of the problem and the
+ILU factorization choice of the system (the global vs the local strategy). In practice, matrix arising from 
+application are of the order of a few thens of thousands unknowns and thus the imapct of communication and synchronization 
+between processors can be neglected.
+The solvers are applied to 2 test matrices. Matrix A and B are both nine-diagonal matrices. The non-zero coefficient of A are constant
+along diagonals of indices -181, -180, -179, -1, 0, 1, 179, 180, 181. Matrix B is of size 32400 and the 
+nonzero coefficient are along diagonal of indices -10801,-180, -179, -1, 0, 1, 179, 180, 10801. The computation
+is done on 3, 4, 5 and 6 processors.
+
+In general, the partail factorization (local preconditioner) is the best one. Because the partial factorization
+overlap, more information is exchanged in the iterative process. This method in combination with a
+small overlap between the blocks, have shown signs of good speedups that is nearly the same as those obtained
+with a diagonal preconditioner. See appendix B.1 for figures with explantion.
+
+
+ 
